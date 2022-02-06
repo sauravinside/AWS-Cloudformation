@@ -1,0 +1,282 @@
+AWSTemplateFormatVersion: 2010-09-09
+Parameters:
+  InstanceTypeParameter:
+    Type: String
+    Default: t2.micro
+    Description: Enter instance size. Default is t2.micro.
+  AMI:
+    Type: String
+    Default: ami-00dfe2c7ce89a450b
+    Description: The Linux AMI to use.
+  Key:
+    Type: String
+    Description: The key used to access the instance.
+
+  MasterUsername:
+    Type: String
+    Description: The username for the database.
+  
+  MasterUserPassword:
+    Type: String
+    Description: The password for the database.
+    "NoEcho": true
+     
+Resources:
+  VPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.10.0.0/16
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      InstanceTenancy: default
+      Tags:
+        - Key: Name
+          Value: VPCAsssessment
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: InternetGatewayAssessment
+  VPCGatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref VPC
+      InternetGatewayId: !Ref InternetGateway
+
+  #Public Subnet
+  SubnetA:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone: !Select [ 0, !GetAZs ] 
+      VpcId: !Ref VPC
+      CidrBlock: 10.10.1.0/24
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: PublicSubnetAssessment
+  RouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: RouteTablePublicSubnet
+  InternetRoute:
+    Type: AWS::EC2::Route
+    DependsOn: InternetGateway
+    Properties:
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+      RouteTableId: !Ref RouteTable
+  SubnetARouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref RouteTable
+      SubnetId: !Ref SubnetA  
+  
+  #Private Subnet
+  SubnetB:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone:  !Select [ 1, !GetAZs ]
+      VpcId: !Ref VPC
+      CidrBlock: 10.10.2.0/24
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value: PrivateSubnetAssessment
+ 
+  # A NAT Gateway:
+  NATGateway:
+   Type: AWS::EC2::NatGateway
+   Properties:
+     AllocationId: !GetAtt ElasticIPAddress.AllocationId
+     SubnetId: !Ref SubnetA
+     Tags:
+     - Key: Name
+       Value: NatGetwayAssessment
+  ElasticIPAddress:
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: VPC
+
+  RouteTablePrivate:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: RouteTablePrivateSubnet
+  Route:
+   Type: AWS::EC2::Route
+   Properties:
+      RouteTableId:
+         Ref: RouteTablePrivate
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId:
+         Ref: NATGateway
+
+  SubnetBRouteTableAssociationPrivate:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref RouteTablePrivate
+      SubnetId: !Ref SubnetB
+
+  InstanceSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: "Internet Group"
+      GroupDescription: "SSH and web traffic in, all traffic out."
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: '22'
+          ToPort: '22'
+          CidrIp:  0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: '80'
+          ToPort: '80'
+          CidrIp:  0.0.0.0/0
+      SecurityGroupEgress:
+        - IpProtocol: -1
+          CidrIp: 0.0.0.0/0
+
+  InstanceSecurityGroupPrivate:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: "Security Group Private"
+      GroupDescription: "SSH from the Public Subnet"
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: '22'
+          ToPort: '22'
+          CidrIp:  10.10.1.0/24
+      SecurityGroupEgress:
+        - IpProtocol: -1
+          CidrIp: 0.0.0.0/0
+
+  InstanceSecurityGroupDataBase:
+    Type: "AWS::EC2::SecurityGroup"
+    Properties:
+      GroupDescription: "Database instances security group"
+      VpcId: !Ref VPC
+      SecurityGroupIngress: 
+          - IpProtocol: tcp
+            CidrIp: 10.10.2.0/24
+            FromPort: 3306            
+            ToPort: 3306
+      SecurityGroupEgress: 
+          - IpProtocol: -1
+            CidrIp: 0.0.0.0/0
+
+  RDSDBSubnetGroup:
+    Type: "AWS::RDS::DBSubnetGroup"
+    Properties:
+        DBSubnetGroupDescription: "Subnet Group for mySQL database"
+        DBSubnetGroupName: !Sub "${AWS::Region}-aws-database-subnet-group14"
+        SubnetIds: 
+          - !Ref SubnetA
+          - !Ref SubnetB
+        Tags: 
+          - Key: Name
+            Value: DBSubnetGroup
+  
+  RDSDBInstance:
+        Type: AWS::RDS::DBInstance
+        Properties:
+            DBInstanceIdentifier: DBAssessment12
+            AllocatedStorage: 20
+            DBInstanceClass: db.t2.micro
+            Engine: "MYSQL"
+            MasterUsername: !Ref MasterUsername
+            MasterUserPassword: !Ref MasterUserPassword
+            MultiAZ: false
+            EngineVersion: 8.0.20
+            AutoMinorVersionUpgrade: true
+            PubliclyAccessible: false
+            StorageType: gp2
+            Port: 3306
+            StorageEncrypted: false
+            CopyTagsToSnapshot: true
+            EnableIAMDatabaseAuthentication: false
+            DeletionProtection: true
+            DBSubnetGroupName: !Ref RDSDBSubnetGroup 
+            VPCSecurityGroups: 
+              - !Ref InstanceSecurityGroupDataBase
+            MaxAllocatedStorage: 1000
+            Tags: 
+              - Key: Name
+                Value: DBAssessment
+              - Key: createdBy
+                Value: Igor Silva
+              - Key: Project
+                Value: AssessmentModule7
+              - Key: Environment
+                Value: Prod
+
+  LinuxPublic:
+    Type: 'AWS::EC2::Instance'
+    Properties:
+      SubnetId: !Ref SubnetA
+      ImageId: !Ref AMI
+      InstanceType:
+        Ref: InstanceTypeParameter
+      KeyName: !Ref Key
+      SecurityGroupIds:
+        - Ref: InstanceSecurityGroup
+      BlockDeviceMappings:
+        - DeviceName: /dev/xvda
+          Ebs:
+            VolumeSize: 8
+      Tags:
+        - Key: Name
+          Value: LinuxPublic  
+
+  LinuxPrivate:
+    Type: 'AWS::EC2::Instance'
+    Properties:
+      SubnetId: !Ref SubnetB
+      ImageId: !Ref AMI
+      InstanceType:
+        Ref: InstanceTypeParameter
+      KeyName: !Ref Key
+      SecurityGroupIds:
+        - Ref: InstanceSecurityGroupPrivate
+      BlockDeviceMappings:
+        - DeviceName: /dev/xvda
+          Ebs:
+            VolumeSize: 8
+      Tags:
+      - Key: Name
+        Value: LinuxPrivate         
+   
+  HostedZone:
+    Type: AWS::Route53::HostedZone
+    Properties:
+      HostedZoneConfig:
+        Comment: ''
+      Name: newpracticedomain.ml
+
+  MyDNSRecord:
+    Type: AWS::Route53::RecordSet
+    Properties:
+      HostedZoneId: !Ref HostedZone
+      Name: www.newpracticedomain.ml.
+      Type: A
+      TTL: 300
+      ResourceRecords:
+      - !GetAtt LinuxPublic.PublicIp
+   
+Outputs:
+  PublicIp:
+   Description: Server's PublicIp Address
+   Value:
+     Fn::GetAtt:
+       - LinuxPublic
+       - PublicIp
+  HostedZoneID:
+    Description: The ID of the Hosted Zone.
+    Value:
+      Ref: HostedZone
