@@ -1,0 +1,593 @@
+AWSTemplateFormatVersion: 2010-09-09
+Resources:
+  prodvpc:
+    Type: AWS::EC2::VPC
+    Properties: 
+      CidrBlock: 50.50.0.0/16
+      EnableDnsHostnames: true
+      EnableDnsSupport: true
+      InstanceTenancy: default
+      Tags: 
+        - Key: Name
+          Value: prodvpc
+#1st subnet-web-public
+  web:
+    Type: AWS::EC2::Subnet
+    Properties: 
+      AvailabilityZone: us-west-2a
+      CidrBlock: 50.50.1.0/24
+      MapPublicIpOnLaunch: true
+      Tags: 
+        - Key: Name
+          Value: web
+      VpcId: !Ref prodvpc
+
+#2nd subnet-app1-private
+  app1:
+    Type: AWS::EC2::Subnet
+    Properties: 
+      AvailabilityZone: us-west-2b
+      CidrBlock: 50.50.2.0/24
+      MapPublicIpOnLaunch: false
+      Tags: 
+        - Key: Name
+          Value: app1
+      VpcId: !Ref prodvpc
+
+#3rd subnet-app2-private
+  app2:
+    Type: AWS::EC2::Subnet
+    Properties: 
+      AvailabilityZone: us-west-2c
+      CidrBlock: 50.50.3.0/24
+      MapPublicIpOnLaunch: false
+      Tags: 
+        - Key: Name
+          Value: app2
+      VpcId: !Ref prodvpc
+
+#4th subnet-dbcache-private
+  dbcache:
+    Type: AWS::EC2::Subnet
+    Properties: 
+      AvailabilityZone: us-west-2c
+      CidrBlock: 50.50.4.0/24
+      MapPublicIpOnLaunch: false
+      Tags: 
+        - Key: Name
+          Value: dbcache
+      VpcId: !Ref prodvpc
+
+#5th subnet-db-private
+  db:
+    Type: AWS::EC2::Subnet
+    Properties: 
+      AvailabilityZone: us-west-2c
+      CidrBlock: 50.50.5.0/24
+      MapPublicIpOnLaunch: false
+      Tags: 
+        - Key: Name
+          Value: db
+      VpcId: !Ref prodvpc
+
+#igw
+  igw:
+    Type: AWS::EC2::InternetGateway
+    Properties: 
+      Tags: 
+          - Key: Name
+            Value: igw
+
+  attachigw:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties: 
+      InternetGatewayId: !Ref igw
+      VpcId: !Ref prodvpc
+
+#nat gateway
+  eip:
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: prodvpc
+      Tags: 
+        - Key: Name
+          Value: eip
+
+  nat:
+    Type: AWS::EC2::NatGateway
+    Properties: 
+      AllocationId: !GetAtt eip.AllocationId
+      ConnectivityType: public
+      SubnetId: !Ref web
+      Tags: 
+          - Key: Name
+            Value: nat
+
+#1st route table
+  publicroute1:
+    Type: AWS::EC2::RouteTable
+    Properties: 
+      Tags: 
+          - Key: Name
+            Value: publicroute1
+      VpcId: !Ref prodvpc
+
+  igwrouting1:
+    Type: AWS::EC2::Route
+    Properties:
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref igw
+      RouteTableId: !Ref publicroute1
+
+  publicsubnetassociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties: 
+      RouteTableId: !Ref publicroute1
+      SubnetId: !Ref web
+
+#2nd route table
+  privateroutewithinternet1:
+    Type: AWS::EC2::RouteTable
+    Properties: 
+      Tags: 
+          - Key: Name
+            Value: privateroutewithinternet1
+      VpcId: !Ref prodvpc
+
+  natrouting1:
+    Type: AWS::EC2::Route
+    Properties: 
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref nat
+      RouteTableId: !Ref privateroutewithinternet1
+
+  privatesubnetassociation1:
+      Type: AWS::EC2::SubnetRouteTableAssociation
+      Properties: 
+        RouteTableId: !Ref privateroutewithinternet1
+        SubnetId: !Ref app1
+
+#3rd route table
+  privateroutewithinternet2:
+    Type: AWS::EC2::RouteTable
+    Properties: 
+      Tags: 
+          - Key: Name
+            Value: privateroutewithinternet2
+      VpcId: !Ref prodvpc
+
+  natrouting2:
+    Type: AWS::EC2::Route
+    Properties: 
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref nat
+      RouteTableId: !Ref privateroutewithinternet2
+
+  privatesubnetassociation2:
+      Type: AWS::EC2::SubnetRouteTableAssociation
+      Properties: 
+        RouteTableId: !Ref privateroutewithinternet2
+        SubnetId: !Ref dbcache
+
+#4th route table
+  privateroutewithoutinternet1:
+    Type: AWS::EC2::RouteTable
+    Properties: 
+      Tags: 
+          - Key: Name
+            Value: privateroutewithoutinternet1
+      VpcId: !Ref prodvpc
+
+  privatesubnetassociation3:
+      Type: AWS::EC2::SubnetRouteTableAssociation
+      Properties: 
+        RouteTableId: !Ref privateroutewithoutinternet1
+        SubnetId: !Ref app2
+
+#5th route table
+  privateroutewithoutinternet2:
+    Type: AWS::EC2::RouteTable
+    Properties: 
+      Tags: 
+          - Key: Name
+            Value: privateroutewithoutinternet2
+      VpcId: !Ref prodvpc
+
+  peeringrouting:
+    Type: AWS::EC2::Route
+    Properties:
+      DestinationCidrBlock: 60.60.2.0/24
+      GatewayId: !Ref peering
+      RouteTableId: !Ref privateroutewithoutinternet2
+
+  privatesubnetassociation4:
+      Type: AWS::EC2::SubnetRouteTableAssociation
+      Properties: 
+        RouteTableId: !Ref privateroutewithoutinternet2
+        SubnetId: !Ref db
+
+#security Groups 
+  sg1:
+    Type: AWS::EC2::SecurityGroup
+    Properties: 
+      GroupDescription: sg1
+      GroupName: sg1
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: '22'
+          ToPort: '22'
+          CidrIp:  0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: '80'
+          ToPort: '80'
+          CidrIp:  0.0.0.0/0
+      SecurityGroupEgress:
+        - IpProtocol: -1
+          FromPort: -1
+          ToPort: -1
+          CidrIp: 0.0.0.0/0
+      VpcId: !Ref prodvpc
+      Tags: 
+        - Key: Name
+          Value: sg1
+
+  sg2:
+    Type: AWS::EC2::SecurityGroup
+    Properties: 
+      GroupDescription: sg2
+      GroupName: sg2
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: '22'
+          ToPort: '22'
+          CidrIp:  0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: '80'
+          ToPort: '80'
+          CidrIp:  0.0.0.0/0
+      SecurityGroupEgress:
+        - IpProtocol: -1
+          FromPort: -1
+          ToPort: -1
+          CidrIp: 0.0.0.0/0
+      VpcId: !Ref prodvpc
+      Tags: 
+        - Key: Name
+          Value: sg2
+
+  sg3:
+    Type: AWS::EC2::SecurityGroup
+    Properties: 
+      GroupDescription: sg3
+      GroupName: sg3
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: '22'
+          ToPort: '22'
+          CidrIp:  0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: '80'
+          ToPort: '80'
+          CidrIp:  0.0.0.0/0
+      SecurityGroupEgress:
+        - IpProtocol: -1
+          FromPort: -1
+          ToPort: -1
+          CidrIp: 0.0.0.0/0
+      VpcId: !Ref prodvpc
+      Tags: 
+        - Key: Name
+          Value: sg3
+
+  sg4:
+    Type: AWS::EC2::SecurityGroup
+    Properties: 
+      GroupDescription: sg4
+      GroupName: sg4
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: '22'
+          ToPort: '22'
+          CidrIp:  0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: '80'
+          ToPort: '80'
+          CidrIp:  0.0.0.0/0
+      SecurityGroupEgress:
+        - IpProtocol: -1
+          FromPort: -1
+          ToPort: -1
+          CidrIp: 0.0.0.0/0
+      VpcId: !Ref prodvpc
+      Tags: 
+        - Key: Name
+          Value: sg4
+
+  sg5:
+    Type: AWS::EC2::SecurityGroup
+    Properties: 
+      GroupDescription: sg5
+      GroupName: sg5
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: '22'
+          ToPort: '22'
+          CidrIp:  0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: '80'
+          ToPort: '80'
+          CidrIp:  0.0.0.0/0
+      SecurityGroupEgress:
+        - IpProtocol: -1
+          FromPort: -1
+          ToPort: -1
+          CidrIp: 0.0.0.0/0
+      VpcId: !Ref prodvpc
+      Tags: 
+        - Key: Name
+          Value: sg5
+
+#instances
+  instance1:
+    Type: AWS::EC2::Instance
+    Properties: 
+      ImageId: ami-0892d3c7ee96c0bf7
+      InstanceType: t2.micro
+      KeyName: iam-oregon
+      SecurityGroupIds: 
+        - !Ref sg1
+      SubnetId: !Ref web
+      Tags: 
+          - Key: Name
+            Value: web
+
+  Instance2:
+    Type: AWS::EC2::Instance
+    Properties: 
+      ImageId: ami-0892d3c7ee96c0bf7
+      KeyName: iam-oregon
+      InstanceType: t2.micro
+      SecurityGroupIds: 
+        - !Ref sg2
+      SubnetId: !Ref app1
+      Tags: 
+        - Key: Name
+          Value: app1
+
+  Instance3:
+    Type: AWS::EC2::Instance
+    Properties: 
+      ImageId: ami-0892d3c7ee96c0bf7
+      KeyName: iam-oregon
+      InstanceType: t2.micro
+      SecurityGroupIds: 
+        - !Ref sg3
+      SubnetId: !Ref app2
+      Tags: 
+        - Key: Name
+          Value: app2
+
+  Instance4:
+    Type: AWS::EC2::Instance
+    Properties: 
+      ImageId: ami-0892d3c7ee96c0bf7
+      KeyName: iam-oregon
+      InstanceType: t2.micro
+      SecurityGroupIds: 
+        - !Ref sg4
+      SubnetId: !Ref dbcache
+      Tags: 
+        - Key: Name
+          Value: dbcache
+
+  Instance5:
+    Type: AWS::EC2::Instance
+    Properties: 
+      ImageId: ami-0892d3c7ee96c0bf7
+      KeyName: iam-oregon
+      InstanceType: t2.micro
+      SecurityGroupIds: 
+        - !Ref sg5
+      SubnetId: !Ref db
+      Tags: 
+        - Key: Name
+          Value: db
+
+#dev vpc
+  devvpc:
+    Type: AWS::EC2::VPC
+    Properties: 
+      CidrBlock: 60.60.0.0/16
+      EnableDnsHostnames: true
+      EnableDnsSupport: true
+      InstanceTenancy: default
+      Tags: 
+        - Key: Name
+          Value: devvpc
+#1st subnet-web-public
+  devweb:
+    Type: AWS::EC2::Subnet
+    Properties: 
+      AvailabilityZone: us-west-2a
+      CidrBlock: 60.60.1.0/24
+      MapPublicIpOnLaunch: true
+      Tags: 
+        - Key: Name
+          Value: devweb
+      VpcId: !Ref devvpc
+
+#2nd subnet-db-private
+  devdb:
+    Type: AWS::EC2::Subnet
+    Properties: 
+      AvailabilityZone: us-west-2b
+      CidrBlock: 60.60.2.0/24
+      MapPublicIpOnLaunch: false
+      Tags: 
+        - Key: Name
+          Value: devdb
+      VpcId: !Ref devvpc
+
+#igw
+  devigw:
+    Type: AWS::EC2::InternetGateway
+    Properties: 
+      Tags: 
+          - Key: Name
+            Value: devigw
+
+  attachdevigw:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties: 
+      InternetGatewayId: !Ref devigw
+      VpcId: !Ref devvpc
+
+#nat gateway
+  deveip:
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: devvpc
+      Tags: 
+        - Key: Name
+          Value: deveip
+
+  devnat:
+    Type: AWS::EC2::NatGateway
+    Properties: 
+      AllocationId: !GetAtt deveip.AllocationId
+      ConnectivityType: public
+      SubnetId: !Ref devweb
+      Tags: 
+          - Key: Name
+            Value: devnat
+
+#1st route table
+  devpublicroute1:
+    Type: AWS::EC2::RouteTable
+    Properties: 
+      Tags: 
+          - Key: Name
+            Value: devpublicroute1
+      VpcId: !Ref devvpc
+
+  devigwrouting1:
+    Type: AWS::EC2::Route
+    Properties:
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref devigw
+      RouteTableId: !Ref devpublicroute1
+
+  devpublicsubnetassociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties: 
+      RouteTableId: !Ref devpublicroute1
+      SubnetId: !Ref devweb
+
+#2nd route table
+  devprivateroutewithoutinternet:
+    Type: AWS::EC2::RouteTable
+    Properties: 
+      Tags: 
+          - Key: Name
+            Value: devprivateroutewithoutinternet
+      VpcId: !Ref devvpc
+
+  devpeeringrouting:
+    Type: AWS::EC2::Route
+    Properties:
+      DestinationCidrBlock: 50.50.5.0/24
+      GatewayId: !Ref peering
+      RouteTableId: !Ref devprivateroutewithoutinternet
+
+  devprivatesubnetassociation:
+      Type: AWS::EC2::SubnetRouteTableAssociation
+      Properties: 
+        RouteTableId: !Ref devprivateroutewithoutinternet
+        SubnetId: !Ref devdb
+
+  #security Groups 
+  devsg1:
+    Type: AWS::EC2::SecurityGroup
+    Properties: 
+      GroupDescription: devsg1
+      GroupName: devsg1
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: '22'
+          ToPort: '22'
+          CidrIp:  0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: '80'
+          ToPort: '80'
+          CidrIp:  0.0.0.0/0
+      SecurityGroupEgress:
+        - IpProtocol: -1
+          FromPort: -1
+          ToPort: -1
+          CidrIp: 0.0.0.0/0
+      VpcId: !Ref devvpc
+      Tags: 
+        - Key: Name
+          Value: devsg1
+
+  devsg2:
+    Type: AWS::EC2::SecurityGroup
+    Properties: 
+      GroupDescription: devsg2
+      GroupName: devsg2
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: '22'
+          ToPort: '22'
+          CidrIp:  0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: '80'
+          ToPort: '80'
+          CidrIp:  0.0.0.0/0
+      SecurityGroupEgress:
+        - IpProtocol: -1
+          FromPort: -1
+          ToPort: -1
+          CidrIp: 0.0.0.0/0
+      VpcId: !Ref devvpc
+      Tags: 
+        - Key: Name
+          Value: devsg2
+
+  #instances
+  devinstance1:
+    Type: AWS::EC2::Instance
+    Properties: 
+      ImageId: ami-0892d3c7ee96c0bf7
+      InstanceType: t2.micro
+      KeyName: iam-oregon
+      SecurityGroupIds: 
+        - !Ref devsg1
+      SubnetId: !Ref devweb
+      Tags: 
+          - Key: Name
+            Value: devweb
+
+  devInstance2:
+    Type: AWS::EC2::Instance
+    Properties: 
+      ImageId: ami-0892d3c7ee96c0bf7
+      KeyName: iam-oregon
+      InstanceType: t2.micro
+      SecurityGroupIds: 
+        - !Ref devsg2
+      SubnetId: !Ref devdb
+      Tags: 
+        - Key: Name
+          Value: devdb
+
+#peering connection
+  peering:
+    Type: AWS::EC2::VPCPeeringConnection
+    Properties: 
+      PeerVpcId: !Ref prodvpc
+      VpcId: !Ref devvpc
+      Tags: 
+        - Key: Name
+          Value: peering
+
