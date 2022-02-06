@@ -197,7 +197,7 @@ Resources:
     Type: AWS::EC2::Route
     Properties:
       DestinationCidrBlock: 60.60.2.0/24
-      GatewayId: !Ref peering
+      VpcPeeringConnectionId: !Ref peering
       RouteTableId: !Ref privateroutewithoutinternet2
 
   privatesubnetassociation4:
@@ -482,7 +482,7 @@ Resources:
     Properties: 
       RouteTableId: !Ref devpublicroute1
       SubnetId: !Ref devweb
-
+      
 #2nd route table
   devprivateroutewithoutinternet:
     Type: AWS::EC2::RouteTable
@@ -496,7 +496,7 @@ Resources:
     Type: AWS::EC2::Route
     Properties:
       DestinationCidrBlock: 50.50.5.0/24
-      GatewayId: !Ref peering
+      VpcPeeringConnectionId: !Ref peering
       RouteTableId: !Ref devprivateroutewithoutinternet
 
   devprivatesubnetassociation:
