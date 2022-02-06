@@ -1,0 +1,8 @@
+AWSTemplateFormatVersion: 2010-09-09
+Resources:
+  eip:
+    Type: AWS::EC2::EIP
+    Properties:
+      Tags: 
+        - Key: Name
+          Value: stack-eip

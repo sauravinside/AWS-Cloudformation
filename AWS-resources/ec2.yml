@@ -1,0 +1,14 @@
+AWSTemplateFormatVersion: 2010-09-09
+Resources:
+  Instance1:
+    Type: AWS::EC2::Instance
+    Properties: 
+      ImageId: ami-087c17d1fe0178315
+      KeyName: iam-virginia-saurav
+      InstanceType: t2.micro
+      SecurityGroupIds: 
+        - sg-18b98206
+      SubnetId: subnet-4b8b7a07
+      Tags: 
+        - Key: Name
+          Value: Saurav

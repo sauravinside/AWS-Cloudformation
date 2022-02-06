@@ -1,0 +1,117 @@
+AWSTemplateFormatVersion: 2010-09-09
+Resources:
+  stackvpc:
+    Type: AWS::EC2::VPC
+    Properties: 
+      CidrBlock: 50.50.0.0/16
+      EnableDnsHostnames: true
+      EnableDnsSupport: true
+      InstanceTenancy: default
+      Tags: 
+        - Key: Name
+          Value: stackvpc
+
+
+  stackpublicsubnetweb:
+    Type: AWS::EC2::Subnet
+    Properties: 
+      AvailabilityZone: us-west-2a
+      CidrBlock: 50.50.1.0/24
+      MapPublicIpOnLaunch: true
+      Tags: 
+        - Key: Name
+          Value: stackpublicsubnetweb
+      VpcId: !Ref stackvpc
+
+  stackpublicsubnetweb2:
+    Type: AWS::EC2::Subnet
+    Properties: 
+      AvailabilityZone: us-west-2b
+      CidrBlock: 50.50.2.0/24
+      MapPublicIpOnLaunch: true
+      Tags: 
+        - Key: Name
+          Value: stackpublicsubnetweb2
+      VpcId: !Ref stackvpc
+
+  stackigw:
+    Type: AWS::EC2::InternetGateway
+    Properties: 
+      Tags: 
+          - Key: Name
+            Value: stackigw
+
+  attachigw:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties: 
+      InternetGatewayId: !Ref stackigw
+      VpcId: !Ref stackvpc
+
+  stackpublicroute:
+    Type: AWS::EC2::RouteTable
+    Properties: 
+      Tags: 
+          - Key: Name
+            Value: stackpublicroute
+      VpcId: !Ref stackvpc
+
+  routing1:
+    Type: AWS::EC2::Route
+    Properties:
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref stackigw
+      RouteTableId: !Ref stackpublicroute
+
+  subnetassociation1:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties: 
+      RouteTableId: !Ref stackpublicroute
+      SubnetId: !Ref stackpublicsubnetweb
+
+  subnetassociation2:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties: 
+      RouteTableId: !Ref stackpublicroute
+      SubnetId: !Ref stackpublicsubnetweb2
+
+  RDSDBSubnetGroup:
+    Type: "AWS::RDS::DBSubnetGroup"
+    Properties:
+        DBSubnetGroupDescription: "Subnet Group for mySQL database"
+        DBSubnetGroupName: !Sub "${AWS::Region}-aws-database-subnet-group14"
+        SubnetIds: 
+          - !Ref SubnetA
+          - !Ref SubnetB
+        Tags: 
+          - Key: Name
+            Value: DBSubnetGroup
+
+  RDSDBInstance:
+        Type: AWS::RDS::DBInstance
+        Properties:
+            DBInstanceIdentifier: RDS
+            AllocatedStorage: 20
+            DBInstanceClass: db.t2.micro
+            Engine: "MYSQL"
+            MasterUsername: admin
+            MasterUserPassword: admin123
+            MultiAZ: false
+            EngineVersion: 8.0.20
+            AutoMinorVersionUpgrade: true
+            PubliclyAccessible: false
+            StorageType: gp2
+            Port: 3306
+            StorageEncrypted: false
+            CopyTagsToSnapshot: true
+            EnableIAMDatabaseAuthentication: false
+            DeletionProtection: false
+            MaxAllocatedStorage: 1000
+            Tags: 
+              - Key: Name
+                Value: DBAssessment
+              - Key: createdBy
+                Value: Igor Silva
+              - Key: Project
+                Value: AssessmentModule7
+              - Key: Environment
+                Value: Prod

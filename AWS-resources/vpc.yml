@@ -1,0 +1,46 @@
+AWSTemplateFormatVersion: 2010-09-09
+Resources:
+  sauravpc:
+    Type: AWS::EC2::VPC
+    Properties: 
+      CidrBlock: 10.30.0.0/16
+      EnableDnsHostnames: true
+      EnableDnsSupport: true
+      InstanceTenancy: default
+      Tags: 
+        - Key: Name
+          Value: Saurav
+  Web:
+    Type: AWS::EC2::Subnet  
+    Properties: 
+      AvailabilityZone: us-east-1a
+      CidrBlock: 10.30.1.0/24
+      MapPublicIpOnLaunch: true
+      Tags: 
+        - Key: Name
+          Value: websubnet
+      VpcId: !Ref sauravpc
+  App:
+    Type: AWS::EC2::Subnet  
+    Properties: 
+      AvailabilityZone: us-east-1b
+      CidrBlock: 10.30.2.0/24
+      MapPublicIpOnLaunch: true
+      Tags: 
+        - Key: Name
+          Value: appsubnet
+      VpcId: !Ref sauravpc      
+  igw:
+    Type: AWS::EC2::InternetGateway
+    Properties: 
+      Tags: 
+        - Key: Name
+          Value: sauravigw
+  attachigw:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties: 
+      InternetGatewayId: !Ref igw
+      VpcId: !Ref sauravpc
+
+
+    
